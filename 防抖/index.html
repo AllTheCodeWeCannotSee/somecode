@@ -1,0 +1,35 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <button id="btn">click!</button>
+</body>
+<script>
+
+    function handleClick() {
+        console.log("clicked!");
+    }
+    // debounce
+    function debounce(fn, delay) {
+        let timer = null;
+        return function(...args) {
+            const context = this;
+            if (timer) {
+                clearTimeout(timer);
+            }
+            timer = setTimeout(() => {
+                fn.apply(context, args);
+            }, delay);
+        }
+    }
+    // 执行
+    const btn = document.getElementById('btn');
+    dbcHandleClick = debounce(handleClick, 1000);
+    btn.onclick = dbcHandleClick;
+</script>
+</html>
