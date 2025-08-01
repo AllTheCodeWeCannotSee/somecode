@@ -2,100 +2,106 @@ const PENDING = "pending";
 const FULFILLED = "fulfilled";
 const REJECTED = "rejected";
 
+function runMicroTask(callback, data, resolve, reject) {
+  setTimeout(() => {
+    try {
+      const res = callback(data);
+      resolve(res);
+    } catch (e) {
+      reject(e);
+    }
+  }, 0);
+}
+
 class MyPromise {
   constructor(executor) {
     this.status = PENDING;
-    this.result = undefined;
-    this.onFulfilledCallbacks = [];
-    this.onRejectedCallbacks = [];
-
-    // 捕获 executor 中的同步错误
-    try {
-      executor(this.resolve.bind(this), this.reject.bind(this));
-    } catch (error) {
-      this.reject(error);
-    }
+    this.result = null;
+    this.onFulfilledCallbacks = []; // [{ callback, resolve, reject }, ...]
+    this.onRejectedCallbacks = []; // [{ callback, resolve, reject }, ...]
+    executor(this.resolve.bind(this), this.reject.bind(this));
   }
-
-  resolve(data) {
-    // resolve/reject 中也应该用 setTimeout 来模拟异步
-    // 状态一旦改变就不可再变
-    if (this.status === PENDING) {
-      setTimeout(() => {
-        this.status = FULFILLED;
-        this.result = data;
-        this.onFulfilledCallbacks.forEach((callback) => callback(this.result));
-      }, 0);
-    }
-  }
-
-  reject(data) {
-    if (this.status === PENDING) {
-      setTimeout(() => {
-        this.status = REJECTED;
-        this.result = data;
-        this.onRejectedCallbacks.forEach((callback) => callback(this.result));
-      }, 0);
-    }
-  }
-
   then(onFulfilled, onRejected) {
-    onFulfilled =
-      typeof onFulfilled === "function" ? onFulfilled : (value) => value;
-    onRejected =
-      typeof onRejected === "function"
-        ? onRejected
-        : (reason) => {
-            throw reason;
-          };
-
-    const promise2 = new MyPromise((resolve, reject) => {
-      if (this.status === FULFILLED) {
-        setTimeout(() => {
-          try {
-            const x = onFulfilled(this.result);
-            resolve(x);
-          } catch (error) {
-            reject(error);
-          }
-        }, 0);
-      }
-
-      if (this.status === REJECTED) {
-        setTimeout(() => {
-          try {
-            const x = onRejected(this.result);
-            resolve(x); // 注意：.then 的 onRejected 回调如果正常返回，新的 promise 是 fulfilled
-          } catch (error) {
-            reject(error);
-          }
-        }, 0);
-      }
-
+    return new MyPromise((resolve, reject) => {
       if (this.status === PENDING) {
-        this.onFulfilledCallbacks.push(() => {
-          setTimeout(() => {
-            try {
-              const x = onFulfilled(this.result);
-              resolve(x);
-            } catch (error) {
-              reject(error);
-            }
-          }, 0);
+        this.onFulfilledCallbacks.push({
+          callback: onFulfilled,
+          resolve,
+          reject,
         });
-        this.onRejectedCallbacks.push(() => {
-          setTimeout(() => {
-            try {
-              const x = onRejected(this.result);
-              resolve(x);
-            } catch (error) {
-              reject(error);
-            }
-          }, 0);
+        this.onRejectedCallbacks.push({
+          callback: onRejected,
+          resolve,
+          reject,
         });
+      } else if (this.status === FULFILLED) {
+        runMicroTask(onFulfilled, this.result, resolve, reject);
+      } else if (this.status === REJECTED) {
+        runMicroTask(onRejected, this.result, resolve, reject);
       }
     });
+  }
+  resolve(data) {
+    // console.log(data);
+    this.changeStatus(FULFILLED, data);
+    // console.log("this.result: ", this.result);
 
-    return promise2;
+    this.handleCallbacks(FULFILLED);
+  }
+  reject(data) {
+    // console.log(data);
+
+    this.changeStatus(REJECTED, data);
+    // console.log("this.result: ", this.result);
+    this.handleCallbacks(REJECTED);
+  }
+  handleCallbacks(status) {
+    let callbacks = [];
+    status === FULFILLED
+      ? (callbacks = this.onFulfilledCallbacks)
+      : (callbacks = this.onRejectedCallbacks);
+
+    while (callbacks.length) {
+      const { callback, resolve, reject } = callbacks[0];
+      callbacks.shift();
+      runMicroTask(callback, this.result, resolve, reject);
+    }
+  }
+
+  changeStatus(status, data) {
+    if (this.status !== PENDING) {
+      return;
+    }
+    this.status = status;
+    this.result = data;
   }
 }
+
+const pm = new MyPromise((resolve, reject) => {
+  const num = Math.random();
+  setTimeout(() => {
+    if (num > 0.5) {
+      resolve("Yes, indeed");
+    } else {
+      reject("Sorry...");
+    }
+  }, 1000);
+});
+
+pm.then(
+  (data) => {
+    console.log(data);
+    return "happy promise2";
+  },
+  (data) => {
+    console.log(data);
+    throw "sad promise2";
+  }
+).then(
+  (data) => {
+    console.log(data);
+  },
+  (data) => {
+    console.log(data);
+  }
+);
